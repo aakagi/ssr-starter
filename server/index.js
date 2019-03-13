@@ -1,10 +1,9 @@
-import next from 'next';
-import { DefaultQuery } from 'next/router';
-import compression from 'compression';
-import { parse } from 'url';
-import { useStaticRendering } from 'mobx-react';
-import express, { Request, Response } from 'express';
-import LRUCache from 'lru-cache';
+const next = require('next');
+const compression = require('compression');
+const { parse } = require('url');
+const { useStaticRendering } = require('mobx-react');
+const express = require('express');
+const LRUCache = require('lru-cache');
 
 const DEV = process.env.NODE_ENV !== 'production'
 const PORT = process.env.PORT || 3000;
@@ -18,7 +17,7 @@ const ssrCache = new LRUCache({
   maxAge: 1000 * 60 * 60 * 24 // 24h
 });
 
-const cachedRender = (req: Request, res: Response, pagePath: string, queryParams?: DefaultQuery) => {
+const cachedRender = (req, res, pagePath, queryParams) => {
   const key = `${req.url}`;
 
   if (!DEV && ssrCache.has(key)) {
@@ -29,14 +28,13 @@ const cachedRender = (req: Request, res: Response, pagePath: string, queryParams
 
   app.renderToHTML(req, res, pagePath, queryParams)
     .then(html => {
-      ssrCache.set(key, html)
-
-      res.append('X-Cache', 'MISS')
-      res.append('Cache-Control', 'public, max-age=86400')
-      res.send(html)
+      ssrCache.set(key, html);
+      res.append('X-Cache', 'MISS');
+      res.append('Cache-Control', 'public, max-age=86400');
+      res.send(html);
     })
     .catch((err) => {
-      app.renderError(err, req, res, pagePath, queryParams)
+      app.renderError(err, req, res, pagePath, queryParams);
     });
 };
 
@@ -54,15 +52,24 @@ app.prepare().then(() => {
   server.disable('x-powered-by'); // Remove Express default header
 
   server.use('/static', express.static('./static', {
-    maxAge: '48h',
+    maxAge: 0,
+    etag: false,
     index: false,
     redirect: false,
-    extensions: ['png', 'jpg'],
+    extensions: ['png', 'jpg', 'pdf'],
+  }));
+
+  server.use('/css', express.static('./static', {
+    maxAge: 0,
+    etag: false,
+    index: false,
+    redirect: false,
+    extensions: ['css'],
   }));
 
   // Catch update pings in DEV
   if (DEV) {
-    server.get('/_next/*', (req: Request, res: Response) => {
+    server.get('/_next/*', (req, res) => {
       const parsedUrl = parse(req.url, true);
       handle(req, res, parsedUrl);
     });
@@ -73,21 +80,15 @@ app.prepare().then(() => {
   // Routes
   // 
 
-  server.get('/', (req: Request, res: Response) => {
+  server.get('/', (req, res) => {
     cachedRender(req, res, '/');
   });
-
-  server.get('*', (req: Request, res: Response) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  });
-
 
   // 
   // Launch server
   // 
 
-  server.listen(PORT, (err: any) => {
+  server.listen(PORT, (err) => {
     if (err) {
       throw err;
     }
